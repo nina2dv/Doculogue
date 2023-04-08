@@ -2,16 +2,13 @@ import os
 import sys
 import streamlit as st
 from langchain.document_loaders import UnstructuredURLLoader
-from langchain.document_loaders import UnstructuredPDFLoader
 from langchain.document_loaders import UnstructuredFileLoader
-from langchain.document_loaders import DirectoryLoader
+from langchain.chains.question_answering import load_qa_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.llms import OpenAI
 from langchain.memory import ConversationBufferWindowMemory
-from tempfile import NamedTemporaryFile
-from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 import pinecone
 
@@ -28,7 +25,9 @@ pinecone.init(
 index_name = "langchain2"
 global genre
 global uploaded_file
-def slidebarFunc():
+
+
+def slidebar_func():
     global genre
     global uploaded_file
     with st.sidebar:
@@ -43,8 +42,6 @@ def slidebarFunc():
                     """Enter online sites such as: \n- https://open.umn.edu \n- https://arxiv.org\n- https://en.wikipedia.org""")
 
             if submit_button1:
-                # st.write(uploaded_file)
-                # st.write(uploaded_file.name)
                 try:
                     loader = UnstructuredURLLoader(urls=[search1])
                 except:
@@ -54,7 +51,6 @@ def slidebarFunc():
         else:
             uploaded_file = st.file_uploader("Choose File", type=['pdf', 'txt'], accept_multiple_files=False, key=None, help=None,
                                              on_change=None, label_visibility="visible")
-            # uploaded_file = st.file_uploader("File upload", type='csv')
             if uploaded_file is not None:
                 if uploaded_file.name not in os.listdir("data"):
                     with open("data/" + uploaded_file.name, "wb") as f:
@@ -65,6 +61,7 @@ def slidebarFunc():
                 return loader
             else:
                 return None
+
 
 st.set_page_config(page_title="Doculogue", page_icon="📄")
 st.title("Doculogue")
@@ -105,14 +102,10 @@ Context: {context}
 User: {human_input}
 AI Assistant:
 Answer in Markdown:"""
-from langchain.chains import ConversationChain
-from langchain.chains.question_answering import load_qa_chain
 
-# memory = ConversationBufferWindowMemory(k=5, return_messages=True, memory_key="chat_history")
-# llm = OpenAI(temperature=0.3, openai_api_key=OPENAI_API_KEY, model_name='gpt-3.5-turbo')
-
-# memory=ConversationBufferWindowMemory(k=5, ai_prefix="AI Assistant")
+memory = ConversationBufferWindowMemory(k=5, ai_prefix="AI Assistant")
 tab1, tab2 = st.tabs(["Q&A", "History"])
+
 with tab1:
     st.header("Q&A")
     form = st.form(key='my_form2')
@@ -126,25 +119,12 @@ with tab1:
         memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",
                                                input_key="human_input")
         chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt_template)
-        # chain = load_qa_chain(llm, chain_type="stuff")
         docs = st.session_state["docsearch"].similarity_search(search, include_metadata=True)
-        # conversation = ConversationChain(llm=llm, chat_history=memory.load_memory_variables(inputs=[])['history'], prompt=prompt_template, context=docs, question=search)
-        # chain = LLMChain(llm=llm, prompt=prompt_template, )
-        # answer = chain.run(context=docs, question=search, chat_history=memory)
         answer = chain({"input_documents": docs, "human_input": search}, return_only_outputs=True)
-
-        # answer = conversation(search)["response"]
-        # bufw_history = conversation.memory.load_memory_variables(inputs=[])['history']
-        # st.write(bufw_history)
-        # st.write(answer)
         chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{answer}"})
         st.session_state["hist"].append({"input": search, "output": answer["output_text"]})
-        # st.write(st.session_state.hist)
-        # st.info(answer.split("$")[0])
-
         st.info(answer["output_text"])
-        # st.write(chain.memory.buffer)
-        # st.write(chain.memory.load_memory_variables(inputs=[])['chat_history'])
+        
 
 with tab2:
     st.header("History")
