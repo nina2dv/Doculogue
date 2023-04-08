@@ -2,7 +2,6 @@ import os
 import sys
 import streamlit as st
 from langchain.document_loaders import UnstructuredURLLoader
-from langchain.document_loaders import UnstructuredFileLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
@@ -43,7 +42,7 @@ def slidebar_func():
 
             if submit_button1:
                 try:
-                    loader = UnstructuredPDFLoader(urls=[search1])
+                    loader = UnstructuredURLLoader(urls=[search1])
                 except:
                     loader = None
                     st.warning("Link is broken")
