@@ -65,7 +65,7 @@ def slidebar_func():
 
 st.set_page_config(page_title="Doculogue", page_icon="📄")
 st.title("Doculogue")
-loader = slidebarFunc()
+loader = slidebar_func()
 if loader is not None:
     try:
         data = loader.load()
@@ -124,7 +124,7 @@ with tab1:
         chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{answer}"})
         st.session_state["hist"].append({"input": search, "output": answer["output_text"]})
         st.info(answer["output_text"])
-        
+
 
 with tab2:
     st.header("History")
