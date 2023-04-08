@@ -2,6 +2,7 @@ import os
 import sys
 import streamlit as st
 from langchain.document_loaders import UnstructuredURLLoader
+from langchain.document_loaders import UnstructuredFileLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
