@@ -42,7 +42,11 @@ def slidebar_func():
                     """Enter online sites such as: \n- https://open.umn.edu \n- https://arxiv.org\n- https://en.wikipedia.org""")
 
             if submit_button1:
-                loader = UnstructuredURLLoader(urls=[search1])
+                try:
+                    loader = UnstructuredPDFLoader(urls=[search1])
+                except:
+                    loader = None
+                    st.warning("Link is broken")
 
                 return loader
         else:
