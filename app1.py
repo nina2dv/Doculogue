@@ -93,7 +93,7 @@ At the end of your answer, add a newline and return a python list of up to three
 and question leading with a "#" like this without mentioning anything else:
 $['topicURL1', 'topicURL2', 'topicURL3']
 
-If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
+If you do not know the answer, just say "Hmm, I'm not sure." Do not try to make up an answer.
 
 =========
 Context: {context}
