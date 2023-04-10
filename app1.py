@@ -30,12 +30,24 @@ index_name = "langchain2"
 global genre
 global uploaded_file
 
-if "namespace" not in st.session_state:
-    with st.sidebar:
-        search3 = st.text_input(label='Enter namespace')
-        submit_button3 = st.button(label='Enter')
+
+def generate_namespace():
+    placeholder = st.sidebar.empty()
+    with placeholder:
+        form1 = st.form("space")
+        search3 = form1.text_input(label='Enter namespace')
+        submit_button3 = form1.form_submit_button(label='Enter')
     if submit_button3:
         st.session_state["namespace"] = search3
+        placeholder.empty()
+
+
+def delete_namespace():
+    with st.sidebar:
+        submit_button4 = st.button(label='delete vectors')
+    if submit_button4:
+        pinecone_index.delete(deleteAll=True, namespace=st.session_state["namespace"])
+
 
 def slidebar_func():
     global genre
@@ -74,6 +86,12 @@ def slidebar_func():
 
 
 st.title("Doculogue")
+if "namespace" not in st.session_state:
+    generate_namespace()
+
+if "namespace" in st.session_state:
+    delete_namespace()
+
 loader = slidebar_func()
 if loader is not None:
     try:
@@ -91,24 +109,22 @@ if loader is not None:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
     st.write(f'Now you have {len(texts)} documents')
-    st.session_state["docsearch"] = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, namespace=st.session_state["namespace"])
-
-
-if "namespace" in st.session_state:
-    with st.sidebar:
-        submit_button4 = st.button(label='delete vectors')
-    if submit_button4:
-        pinecone_index.delete(deleteAll=True, namespace=st.session_state["namespace"])
-
+    try:
+        st.session_state["docsearch"] = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, namespace=st.session_state["namespace"])
+        st.session_state["docsearch_namespace"] = Pinecone.from_existing_index("langchain2",
+                                                                               embedding=embeddings,
+                                                                               namespace=st.session_state["namespace"])
+    except AttributeError:
+        st.warning("Please enter a namespace")
 
 if "hist" not in st.session_state:
     st.session_state["hist"] = []
 
 template = """You are an AI assistant for answering questions about the Document you have uploaded.
 You are given the following extracted parts of a long document and a question. Provide a conversational answer.
-At the end of your answer, add a newline and return a python list of up to three URL sources which are related to the context
-and question leading with a "#" like this without mentioning anything else:
-#['topicURL1', 'topicURL2', 'topicURL3']
+At the end of your answer, add a newline and return a python list that contains up to three citations on the extracted 
+parts of the document, leading with a "#" like this without mentioning anything else:
+$['citation1', 'citation2', 'citation3']
 
 If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
 
@@ -119,6 +135,7 @@ Context: {context}
 User: {human_input}
 AI Assistant:
 Answer in Markdown:"""
+
 
 memory = ConversationBufferWindowMemory(k=5, ai_prefix="AI Assistant")
 tab1, tab2 = st.tabs(["Q&A", "History"])
@@ -133,12 +150,9 @@ with tab1:
         llm = OpenAI(temperature=0.3, openai_api_key=OPENAI_API_KEY, model_name='gpt-3.5-turbo')
 
         prompt_template = PromptTemplate(input_variables=["human_input", "context", "chat_history"], template=template)
-        memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",
-                                               input_key="human_input")
+        memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",input_key="human_input")
         chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt_template)
-        st.session_state["docsearch_namespace"] = Pinecone.from_existing_index("langchain2",
-                                                                               embedding=embeddings,
-                                                                               namespace=st.session_state["namespace"])
+
         docs = st.session_state["docsearch_namespace"].similarity_search(search, include_metadata=True)
         answer = chain({"input_documents": docs, "human_input": search}, return_only_outputs=True)
         chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{answer}"})
@@ -154,4 +168,5 @@ with tab2:
             st.success(key["output"])
         with col2:
             st.info(key["input"])
+
 
