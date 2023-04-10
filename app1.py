@@ -108,7 +108,7 @@ template = """You are an AI assistant for answering questions about the Document
 You are given the following extracted parts of a long document and a question. Provide a conversational answer.
 At the end of your answer, add a newline and return a python list of up to three URL sources which are related to the context
 and question leading with a "#" like this without mentioning anything else:
-$['topicURL1', 'topicURL2', 'topicURL3']
+#['topicURL1', 'topicURL2', 'topicURL3']
 
 If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
 
