@@ -11,6 +11,7 @@ from langchain.llms import OpenAI
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
 import pinecone
+st.set_page_config(page_title="Doculogue", page_icon="📄")
 
 # initialize API
 OPENAI_API_KEY = st.secrets["OPENAI_KEY"]
@@ -22,10 +23,19 @@ pinecone.init(
     api_key=PINECONE_API_KEY,
     environment=PINECONE_API_ENV
 )
+pinecone_index = pinecone.Index('langchain2')
 index_name = "langchain2"
+
+
 global genre
 global uploaded_file
 
+if "namespace" not in st.session_state:
+    with st.sidebar:
+        search3 = st.text_input(label='Enter namespace')
+        submit_button3 = st.button(label='Enter')
+    if submit_button3:
+        st.session_state["namespace"] = search3
 
 def slidebar_func():
     global genre
@@ -47,7 +57,6 @@ def slidebar_func():
                 except:
                     loader = None
                     st.warning("Link is broken")
-
                 return loader
         else:
             uploaded_file = st.file_uploader("Choose File", type=['pdf', 'txt'], accept_multiple_files=False, key=None, help=None,
@@ -64,7 +73,6 @@ def slidebar_func():
                 return None
 
 
-st.set_page_config(page_title="Doculogue", page_icon="📄")
 st.title("Doculogue")
 loader = slidebar_func()
 if loader is not None:
@@ -83,7 +91,15 @@ if loader is not None:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
     st.write(f'Now you have {len(texts)} documents')
-    st.session_state["docsearch"] = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
+    st.session_state["docsearch"] = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, namespace=st.session_state["namespace"])
+
+
+if "namespace" in st.session_state:
+    with st.sidebar:
+        submit_button4 = st.button(label='delete vectors')
+    if submit_button4:
+        pinecone_index.delete(deleteAll=True, namespace=st.session_state["namespace"])
+
 
 if "hist" not in st.session_state:
     st.session_state["hist"] = []
@@ -94,7 +110,7 @@ At the end of your answer, add a newline and return a python list of up to three
 and question leading with a "#" like this without mentioning anything else:
 $['topicURL1', 'topicURL2', 'topicURL3']
 
-If you do not know the answer, just say "Hmm, I'm not sure." Do not try to make up an answer.
+If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
 
 =========
 Context: {context}
@@ -120,7 +136,10 @@ with tab1:
         memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",
                                                input_key="human_input")
         chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt_template)
-        docs = st.session_state["docsearch"].similarity_search(search, include_metadata=True)
+        st.session_state["docsearch_namespace"] = Pinecone.from_existing_index("langchain2",
+                                                                               embedding=embeddings,
+                                                                               namespace=st.session_state["namespace"])
+        docs = st.session_state["docsearch_namespace"].similarity_search(search, include_metadata=True)
         answer = chain({"input_documents": docs, "human_input": search}, return_only_outputs=True)
         chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{answer}"})
         st.session_state["hist"].append({"input": search, "output": answer["output_text"]})
@@ -135,6 +154,4 @@ with tab2:
             st.success(key["output"])
         with col2:
             st.info(key["input"])
-
-
 
