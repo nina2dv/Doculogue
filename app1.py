@@ -1,8 +1,7 @@
 import os
 import sys
 import streamlit as st
-from langchain.document_loaders import UnstructuredURLLoader
-from langchain.document_loaders import UnstructuredFileLoader
+from langchain.document_loaders import UnstructuredURLLoader, UnstructuredFileLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
@@ -35,7 +34,8 @@ def generate_namespace():
     placeholder = st.sidebar.empty()
     with placeholder:
         form1 = st.form("space")
-        search3 = form1.text_input(label='Enter namespace')
+        search3 = form1.text_input(label='Enter namespace first', help="This is where your"
+                                                                       " documents embeddings will be stored")
         submit_button3 = form1.form_submit_button(label='Enter')
     if submit_button3:
         st.session_state["namespace"] = search3
@@ -44,9 +44,15 @@ def generate_namespace():
 
 def delete_namespace():
     with st.sidebar:
-        submit_button4 = st.button(label='delete vectors')
+        submit_button4 = st.button(label='Clear vectors from namespace')
     if submit_button4:
         pinecone_index.delete(deleteAll=True, namespace=st.session_state["namespace"])
+
+
+def search_docs(index, query):
+    # Search for similar chunks
+    docs = index.similarity_search(query, include_metadata=True)
+    return docs
 
 
 def slidebar_func():
@@ -58,7 +64,7 @@ def slidebar_func():
             ('URL', 'Upload File'))
         if genre == 'URL':
             with st.sidebar.form(key='Form1'):
-                search1 = st.text_input(label='Enter a URL link first')
+                search1 = st.text_input(label='Enter a URL link')
                 submit_button1 = st.form_submit_button(label='Enter')
                 st.info(
                     """Enter online sites such as: \n- https://open.umn.edu \n- https://arxiv.org\n- https://en.wikipedia.org""")
@@ -70,7 +76,7 @@ def slidebar_func():
                     loader = None
                     st.warning("Link is broken")
                 return loader
-        else:
+        elif genre == "Upload File":
             uploaded_file = st.file_uploader("Choose File", type=['pdf', 'txt'], accept_multiple_files=False, key=None, help=None,
                                              on_change=None, label_visibility="visible")
             if uploaded_file is not None:
@@ -93,6 +99,7 @@ if "namespace" in st.session_state:
     delete_namespace()
 
 loader = slidebar_func()
+
 if loader is not None:
     try:
         data = loader.load()
@@ -108,11 +115,11 @@ if loader is not None:
     # st.write(f'There are {len(data[0].page_content)} characters in your document')
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
-    st.write(f'Now you have {len(texts)} documents')
+    # st.write(f'Now you have {len(texts)} documents')
     try:
-        st.session_state["docsearch"] = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, namespace=st.session_state["namespace"])
-        st.session_state["docsearch_namespace"] = Pinecone.from_existing_index("langchain2",
-                                                                               embedding=embeddings,
+        Pinecone.from_texts([t.page_content for t in texts], embedding=embeddings, index_name=index_name,
+                            namespace=st.session_state["namespace"])
+        st.session_state["docsearch_namespace"] = Pinecone.from_existing_index("langchain2",embedding=embeddings,
                                                                                namespace=st.session_state["namespace"])
     except AttributeError:
         st.warning("Please enter a namespace")
@@ -122,23 +129,29 @@ if "hist" not in st.session_state:
 
 template = """You are an AI assistant for answering questions about the Document you have uploaded.
 You are given the following extracted parts of a long document and a question. Provide a conversational answer.
-At the end of your answer, add a newline and return a python list that contains up to three citations on the extracted 
-parts of the document, leading with a "#" like this without mentioning anything else:
-$['citation1', 'citation2', 'citation3']
+At the end of your answer, provide the sources used for your answer such as the page number and the name of the document.
 
 If you don't know the answer, just say "Hmm, I'm not sure." Don't try to make up an answer.
 
 =========
-Context: {context}
+{context}
 =========
 {chat_history}
 User: {human_input}
 AI Assistant:
 Answer in Markdown:"""
 
-
 memory = ConversationBufferWindowMemory(k=5, ai_prefix="AI Assistant")
 tab1, tab2 = st.tabs(["Q&A", "History"])
+
+prompt_template = PromptTemplate(input_variables=["human_input", "context", "chat_history"], template=template)
+memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",input_key="human_input")
+chain = load_qa_chain(llm=OpenAI(temperature=0.3, openai_api_key=OPENAI_API_KEY, model_name='gpt-3.5-turbo')
+                          , chain_type="stuff", memory=memory, prompt=prompt_template)
+def ask(user_input):
+    docs = search_docs(st.session_state["docsearch_namespace"], user_input)
+    answer = chain({"input_documents": docs, "human_input": user_input}, return_only_outputs=True)
+    return answer
 
 with tab1:
     st.header("Q&A")
@@ -147,18 +160,10 @@ with tab1:
     submit_button = form.form_submit_button(label='Enter')
 
     if submit_button:
-        llm = OpenAI(temperature=0.3, openai_api_key=OPENAI_API_KEY, model_name='gpt-3.5-turbo')
-
-        prompt_template = PromptTemplate(input_variables=["human_input", "context", "chat_history"], template=template)
-        memory = ConversationBufferWindowMemory(k=8, return_messages=True, memory_key="chat_history",input_key="human_input")
-        chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt_template)
-
-        docs = st.session_state["docsearch_namespace"].similarity_search(search, include_metadata=True)
-        answer = chain({"input_documents": docs, "human_input": search}, return_only_outputs=True)
-        chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{answer}"})
-        st.session_state["hist"].append({"input": search, "output": answer["output_text"]})
-        st.info(answer["output_text"])
-
+        response = ask(search)
+        chain.memory.save_context({"human_input": f"{search}"}, {"output": f"{response}"})
+        st.session_state["hist"].append({"input": search, "output": response["output_text"]})
+        st.info(response["output_text"])
 
 with tab2:
     st.header("History")
@@ -168,5 +173,3 @@ with tab2:
             st.success(key["output"])
         with col2:
             st.info(key["input"])
-
-
